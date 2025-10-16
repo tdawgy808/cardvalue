@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trading Card Valuation — Advanced OCR + Comps</title>
+  <title>Trading Card Valuation — OCR + Comps</title>
   <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Tesseract.js for on-device OCR (no server needed) -->
   <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
   <!-- FileSaver for CSV export -->
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <!-- Simple UUID for row IDs -->
   <script>
-    // Simple UUID for row IDs
     window.uuidv4 = function () {
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = (Math.random() * 16) | 0,
@@ -22,10 +22,10 @@
   </script>
   <style>
     html { background: #0b1020; }
+    .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(10px); }
     .card { background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.08); }
     .pill { border: 1px dashed rgba(255,255,255,0.25); }
     .mono { font-variant-numeric: tabular-nums; }
-    .hint { color: #a5b4fc; }
   </style>
 </head>
 <body class="text-slate-100 min-h-screen">
@@ -35,9 +35,9 @@
     <header class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl md:text-3xl font-semibold">Trading Card Valuation</h1>
-        <p class="text-slate-300">Upload → OCR (advanced) → confirm details → pull comps → estimate</p>
+        <p class="text-slate-300">Upload → OCR → confirm details → pull comps → estimate</p>
       </div>
-      <div class="text-sm text-slate-300">v1.1 • Local-only (no uploads)</div>
+      <div class="text-sm text-slate-300">v1.0 • All on-device (no uploads)</div>
     </header>
 
     <!-- Uploader + Preview + OCR -->
@@ -47,21 +47,15 @@
         <div id="dropzone" class="pill rounded-xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
           <input id="fileInput" type="file" accept="image/*" class="hidden" />
           <p class="mb-2">Drag & drop or <span class="underline">choose a file</span></p>
-          <p class="text-xs text-slate-300">Best results: straight-on, no glare, fill the frame.</p>
+          <p class="text-xs text-slate-300">Best results: straight-on, good lighting. Crop to front face if possible.</p>
         </div>
         <div class="mt-4 grid grid-cols-2 gap-3">
-          <button id="btnOCR" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40">Run Advanced OCR</button>
+          <button id="btnOCR" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40">Run OCR</button>
           <button id="btnClear" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">Clear</button>
         </div>
-        <div class="mt-2 grid grid-cols-3 gap-2 text-xs">
-          <button id="btnRotate" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600">Rotate 90°</button>
-          <button id="btnFlipH" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600">Flip H</button>
-          <button id="btnFlipV" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600">Flip V</button>
-        </div>
         <div id="ocrStatus" class="text-xs text-slate-300 mt-3"></div>
-        <div class="mt-4 relative">
+        <div class="mt-4">
           <canvas id="previewCanvas" class="w-full rounded-xl"></canvas>
-          <div class="absolute top-2 left-2 text-[10px] hint">Tip: rotate/flip if text looks sideways/backwards before OCR.</div>
         </div>
       </div>
 
@@ -138,7 +132,7 @@
         </div>
       </div>
 
-      <p class="text-slate-300 text-sm mt-1">Paste sale rows here (price, date, source, condition, notes). Use eBay “Sold”, 130point, TCGplayer, COMC, etc.</p>
+      <p class="text-slate-300 text-sm mt-1">Paste sale rows here (price, date, source, condition, notes). Use your own research from eBay “Sold”, 130point, TCGplayer, etc.</p>
 
       <div class="overflow-x-auto mt-3">
         <table class="w-full text-sm">
@@ -199,11 +193,11 @@
       <details class="card rounded-2xl p-4">
         <summary class="cursor-pointer font-medium">How this works (and optional API hooks)</summary>
         <ul class="list-disc pl-6 mt-2 space-y-1">
-          <li><b>OCR:</b> Advanced pipeline upscales, binarizes, and reads top/middle/bottom regions separately for better name/set/# detection.</li>
-          <li><b>Comps:</b> “Generate search links” opens eBay Sold, 130point, TCGplayer, PSA Pop, COMC, and title-only eBay Completed.</li>
-          <li><b>Stats:</b> Outliers removed via IQR, estimate = Median × Condition/Grade multiplier.</li>
-          <li><b>Privacy:</b> Everything runs locally in your browser.</li>
-          <li><b>APIs (optional):</b> Stubs included to hook up eBay Browse / TCGplayer if you add keys.</li>
+          <li><b>OCR:</b> Tesseract.js runs in your browser to guess player/set/year/card#. Click “Run OCR”, then review and edit fields.</li>
+          <li><b>Comps:</b> Click “Generate search links” to open eBay Sold, 130point, PSA Pop, and TCGplayer searches. Copy sale data here.</li>
+          <li><b>Stats:</b> We remove outliers using IQR, then compute Median. Condition multiplier scales for your card vs typical comp grade.</li>
+          <li><b>Privacy:</b> Images and data stay local; nothing is uploaded.</li>
+          <li><b>APIs (optional):</b> This file includes stubs to wire up eBay Browse, TCGplayer, or custom endpoints if you have keys—look for TODOs in code.</li>
         </ul>
       </details>
     </section>
@@ -213,7 +207,11 @@
 
   <script>
     // --- State ---
-    const state = { image: null, ocrText: '', comps: [] };
+    const state = {
+      image: null,
+      ocrText: '',
+      comps: [],
+    };
 
     // --- Elements ---
     const fileInput = document.getElementById('fileInput');
@@ -237,10 +235,6 @@
 
     const btnOCR = document.getElementById('btnOCR');
     const btnClear = document.getElementById('btnClear');
-    const btnRotate = document.getElementById('btnRotate');
-    const btnFlipH = document.getElementById('btnFlipH');
-    const btnFlipV = document.getElementById('btnFlipV');
-
     const btnLinks = document.getElementById('btnLinks');
     const btnSave = document.getElementById('btnSave');
     const btnLoad = document.getElementById('btnLoad');
@@ -264,22 +258,37 @@
     const btnCopySummary = document.getElementById('btnCopySummary');
 
     // --- Helpers ---
-    function formatUSD(n) { const val = isFinite(n) ? Number(n) : 0; return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
-    function parseUSD(s) { if (typeof s === 'number') return s; if (!s) return 0; return parseFloat(String(s).replace(/[^0-9.\-]/g, '')) || 0; }
-
-    // Canvas ops
-    function resizeToFit(img){
-      const maxW = 1200, maxH = 800; let w = img.width, h = img.height; const scale = Math.min(maxW / w, maxH / h, 1);
-      canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
-      ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    function formatUSD(n) {
+      const val = isFinite(n) ? Number(n) : 0;
+      return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
-    function redraw(transform){
-      const img = new Image(); img.onload = () => { canvas.width = img.width; canvas.height = img.height; ctx.setTransform(1,0,0,1,0,0); transform(img); }; img.src = canvas.toDataURL('image/png');
+    function parseUSD(s) {
+      if (typeof s === 'number') return s;
+      if (!s) return 0;
+      return parseFloat(String(s).replace(/[^0-9.\-]/g, '')) || 0;
     }
 
-    // IQR stats
-    function iqrFilter(arr) { if (arr.length < 4) return arr; const sorted = [...arr].sort((a,b)=>a-b); const q1 = quantile(sorted, 0.25); const q3 = quantile(sorted, 0.75); const iqr = q3 - q1; const low = q1 - 1.5 * iqr; const high = q3 + 1.5 * iqr; return sorted.filter(v => v >= low && v <= high); }
-    function quantile(sorted, q) { const pos = (sorted.length - 1) * q; const base = Math.floor(pos); const rest = pos - base; return sorted[base + 1] !== undefined ? sorted[base] + rest * (sorted[base + 1] - sorted[base]) : sorted[base]; }
+    // Outlier removal via IQR
+    function iqrFilter(arr) {
+      if (arr.length < 4) return arr; // need some data
+      const sorted = [...arr].sort((a,b)=>a-b);
+      const q1 = quantile(sorted, 0.25);
+      const q3 = quantile(sorted, 0.75);
+      const iqr = q3 - q1;
+      const low = q1 - 1.5 * iqr;
+      const high = q3 + 1.5 * iqr;
+      return sorted.filter(v => v >= low && v <= high);
+    }
+    function quantile(sorted, q) {
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      if (sorted[base + 1] !== undefined) {
+        return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+      } else {
+        return sorted[base];
+      }
+    }
 
     function recomputeStats() {
       const prices = state.comps.map(r => parseUSD(r.price)).filter(v=>v>0);
@@ -290,127 +299,241 @@
       const q1 = count ? quantile([...filtered].sort((a,b)=>a-b), 0.25) : 0;
       const med = count ? quantile([...filtered].sort((a,b)=>a-b), 0.5) : 0;
       const q3 = count ? quantile([...filtered].sort((a,b)=>a-b), 0.75) : 0;
-      stat_count.textContent = count; stat_min.textContent = formatUSD(min); stat_q1.textContent = formatUSD(q1); stat_median.textContent = formatUSD(med); stat_q3.textContent = formatUSD(q3); stat_max.textContent = formatUSD(max);
-      const mult = computeMultiplier(); multiplierEl.textContent = mult.toFixed(2); est_value.textContent = formatUSD(med * mult);
+
+      stat_count.textContent = count;
+      stat_min.textContent = formatUSD(min);
+      stat_q1.textContent = formatUSD(q1);
+      stat_median.textContent = formatUSD(med);
+      stat_q3.textContent = formatUSD(q3);
+      stat_max.textContent = formatUSD(max);
+
+      // Condition multiplier
+      const mult = computeMultiplier();
+      multiplierEl.textContent = mult.toFixed(2);
+      est_value.textContent = formatUSD(med * mult);
     }
 
     function computeMultiplier() {
       const rawCond = Number(cond_slider.value); // 1-10
       const graded = grade_company.value && Number(grade_value.value);
       const compBasis = comp_grade.value; // assumed comps
+
+      // Baseline mapping -> relative strength vs Raw NM 7 ~= 1.00
       const mapRaw = { 1:0.40, 2:0.48, 3:0.58, 4:0.70, 5:0.82, 6:0.92, 7:1.00, 8:1.08, 9:1.20, 10:1.35 };
       const mapPSA = { 8:1.10, 9:1.45, 10:2.25 };
-      let your = mapRaw[rawCond] || 1.0; if (graded) { const g = Math.max(1, Math.min(10, Number(grade_value.value))); if (g >= 10) your = 2.25; else if (g >= 9) your = 1.45; else if (g >= 8) your = 1.10; else your = 1.0; }
-      let basis = 1.0; if (compBasis === 'raw-ex') basis = mapRaw[5]; if (compBasis === 'raw-nm') basis = mapRaw[7]; if (compBasis === 'psa8') basis = mapPSA[8]; if (compBasis === 'psa9') basis = mapPSA[9]; if (compBasis === 'psa10') basis = mapPSA[10];
+
+      let your = mapRaw[rawCond] || 1.0;
+      if (graded) {
+        const g = Math.max(1, Math.min(10, Number(grade_value.value)));
+        if (g >= 10) your = 2.25; else if (g >= 9) your = 1.45; else if (g >= 8) your = 1.10; else your = 1.0;
+      }
+
+      let basis = 1.0;
+      if (compBasis === 'raw-ex') basis = mapRaw[5];
+      if (compBasis === 'raw-nm') basis = mapRaw[7];
+      if (compBasis === 'psa8') basis = mapPSA[8];
+      if (compBasis === 'psa9') basis = mapPSA[9];
+      if (compBasis === 'psa10') basis = mapPSA[10];
+
       return your / basis;
     }
-    function updateYourCardDesc() { if (grade_company.value && grade_value.value) { your_card_desc.textContent = `${grade_company.value} ${grade_value.value}`; } else { const lab = condLabel(Number(cond_slider.value)); your_card_desc.textContent = `Raw ~ ${lab}`; } }
-    function condLabel(v) { if (v >= 9) return 'Mint (9-10)'; if (v >= 7) return 'NM (7-8)'; if (v >= 5) return 'EX (5-6)'; if (v >= 3) return 'VG (3-4)'; return 'Poor/Fair (1-2)'; }
+
+    function updateYourCardDesc() {
+      if (grade_company.value && grade_value.value) {
+        your_card_desc.textContent = `${grade_company.value} ${grade_value.value}`;
+      } else {
+        const lab = condLabel(Number(cond_slider.value));
+        your_card_desc.textContent = `Raw ~ ${lab}`;
+      }
+    }
+
+    function condLabel(v) {
+      if (v >= 9) return 'Mint (9-10)';
+      if (v >= 7) return 'NM (7-8)';
+      if (v >= 5) return 'EX (5-6)';
+      if (v >= 3) return 'VG (3-4)';
+      return 'Poor/Fair (1-2)';
+    }
 
     // --- UI wiring ---
     dropzone.addEventListener('click', () => fileInput.click());
     dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('bg-white/5'); });
     dropzone.addEventListener('dragleave', e => { dropzone.classList.remove('bg-white/5'); });
-    dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('bg-white/5'); const file = e.dataTransfer.files?.[0]; if (file) loadImage(file); });
-    fileInput.addEventListener('change', e => { const file = e.target.files?.[0]; if (file) loadImage(file); });
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('bg-white/5');
+      const file = e.dataTransfer.files?.[0];
+      if (file) loadImage(file);
+    });
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) loadImage(file);
+    });
 
     function loadImage(file) {
-      const reader = new FileReader(); reader.onload = () => { const img = new Image(); img.onload = () => { state.image = img; resizeToFit(img); }; img.src = reader.result; }; reader.readAsDataURL(file);
-      links.innerHTML = ''; ocrStatus.textContent = '';
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          state.image = img;
+          // Fit to canvas
+          const maxW = 1200, maxH = 800;
+          let w = img.width, h = img.height;
+          const scale = Math.min(maxW / w, maxH / h, 1);
+          canvas.width = Math.round(w * scale);
+          canvas.height = Math.round(h * scale);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+      links.innerHTML = '';
+      ocrStatus.textContent = '';
     }
 
-    btnClear.addEventListener('click', () => { canvas.width = 0; canvas.height = 0; state.image = null; state.ocrText = ''; [field_game, field_year, field_player, field_set, field_number, field_variant].forEach(el => el.value = ''); links.innerHTML = ''; ocrStatus.textContent = ''; });
-    btnRotate.addEventListener('click', () => { if (!state.image) return; redraw(img => { canvas.width = img.height; canvas.height = img.width; ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(Math.PI/2); ctx.drawImage(img, -img.width/2, -img.height/2); }); });
-    btnFlipH.addEventListener('click', () => { if (!state.image) return; redraw(img => { canvas.width = img.width; canvas.height = img.height; ctx.translate(canvas.width, 0); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0); }); });
-    btnFlipV.addEventListener('click', () => { if (!state.image) return; redraw(img => { canvas.width = img.width; canvas.height = img.height; ctx.translate(0, canvas.height); ctx.scale(1, -1); ctx.drawImage(img, 0, 0); }); });
-
-    // --- Advanced OCR pipeline ---
-    function preprocessCanvasForOCR(){
-      const src = document.createElement('canvas'); const sctx = src.getContext('2d');
-      const scale = Math.min(1600 / (canvas.width||1), 1600 / (canvas.height||1), 2) || 1;
-      src.width = Math.round((canvas.width||1) * scale); src.height = Math.round((canvas.height||1) * scale);
-      sctx.drawImage(canvas, 0, 0, src.width, src.height);
-      const imgData = sctx.getImageData(0,0,src.width,src.height); const d = imgData.data; let min=255, max=0;
-      for(let i=0;i<d.length;i+=4){ const g = (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114); min = Math.min(min,g); max = Math.max(max,g); d[i]=d[i+1]=d[i+2]=g; }
-      const rng = Math.max(1, max-min);
-      for(let i=0;i<d.length;i+=4){ let g = (d[i]-min)*255/rng; g = Math.min(255, Math.max(0, g*1.15 + 10)); const bw = g > 160 ? 255 : 0; d[i]=d[i+1]=d[i+2]=bw; d[i+3]=255; }
-      sctx.putImageData(imgData,0,0); return src;
-    }
-    function cropCanvasRegion(src, x,y,w,h){ const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(src, x,y,w,h, 0,0,w,h); return c; }
-    async function recognizeROI(dataUrl, label){ const { data } = await Tesseract.recognize(dataUrl, 'eng', { logger: m => { ocrStatus.textContent = (label?label+': ':'') + (m.status||'') + ' ' + Math.round((m.progress||0)*100) + '%'; } }); return data.text || ''; }
-
-    function pickLikelyName(s){ const lines = s.split(/\n+/).map(l=>l.trim()).filter(Boolean); const cand = []; for(const ln of lines){ const m = ln.match(/\b([A-Z][a-z'\-]+(?:\s+[A-Z][a-z'\-]+){0,2})\b/); if(m && !/(Topps|Prizm|Chrome|Donruss|Panini|Upper Deck|Fleer|Bowman|Pok[eé]mon|Magic|Wizards|Game|RC|Rookie|No\.?)/i.test(m[0])) cand.push(m[0]); } return cand[0]||''; }
-    function pickSetLine(s){ const lines = s.split(/\n+/); return lines.find(l=>/(Topps|Bowman|Chrome|Fleer|Donruss|Panini|Prizm|Select|Optic|Upper Deck|Stadium Club|Heritage|Allen & Ginter|Pok[eé]mon|Wizards|Magic|MTG)/i) || ''; }
-    function pickNumber(s){ const m = s.match(/(?:#|No\.?|Nº|N°)\s*(\d+[A-Z]?)/i) || s.match(/\b(\d{1,4})\b/); return m ? (m[1]||'').trim() : ''; }
+    btnClear.addEventListener('click', () => {
+      canvas.width = 0; canvas.height = 0; state.image = null; state.ocrText = '';
+      [field_game, field_year, field_player, field_set, field_number, field_variant].forEach(el => el.value = '');
+      links.innerHTML = '';
+      ocrStatus.textContent = '';
+    });
 
     btnOCR.addEventListener('click', async () => {
       if (!state.image) { ocrStatus.textContent = 'Please upload an image first.'; return; }
+      ocrStatus.textContent = 'Running OCR…';
       try {
-        ocrStatus.textContent = 'Enhancing image…';
-        const pre = preprocessCanvasForOCR(); const W = pre.width, H = pre.height;
-        const top = cropCanvasRegion(pre, Math.round(W*0.10), Math.round(H*0.05), Math.round(W*0.80), Math.round(H*0.22));
-        const mid = cropCanvasRegion(pre, Math.round(W*0.08), Math.round(H*0.30), Math.round(W*0.84), Math.round(H*0.30));
-        const bot = cropCanvasRegion(pre, Math.round(W*0.10), Math.round(H*0.68), Math.round(W*0.80), Math.round(H*0.22));
-        const fullTxt = await recognizeROI(pre.toDataURL('image/png'), 'Full');
-        const topTxt  = await recognizeROI(top.toDataURL('image/png'), 'Name');
-        const midTxt  = await recognizeROI(mid.toDataURL('image/png'), 'Set');
-        const botTxt  = await recognizeROI(bot.toDataURL('image/png'), 'Number');
-        state.ocrText = [topTxt, midTxt, botTxt, fullTxt].join('\n');
-        populateFieldsFromAdvancedOCR(topTxt, midTxt, botTxt, fullTxt);
-        ocrStatus.textContent = 'OCR complete (advanced). Edit any fields if needed.';
+        const dataUrl = canvas.toDataURL('image/png');
+        const { data } = await Tesseract.recognize(dataUrl, 'eng', { logger: m => { ocrStatus.textContent = m.status + ' ' + Math.round((m.progress||0)*100) + '%'; } });
+        state.ocrText = data.text || '';
+        ocrStatus.textContent = 'OCR complete.';
+        populateFieldsFromOCR(state.ocrText);
       } catch (e) {
-        console.error(e); ocrStatus.textContent = 'OCR failed. Try recropping, better lighting, or flatter image.';
+        console.error(e);
+        ocrStatus.textContent = 'OCR failed. Try a clearer, closer photo.';
       }
     });
 
-    function populateFieldsFromAdvancedOCR(topTxt, midTxt, botTxt, fullTxt){
-      const all = [topTxt, midTxt, botTxt, fullTxt].join('\n');
-      const yearMatch = all.match(/\b(19\d{2}|20\d{2})\b/); if (yearMatch && !field_year.value) field_year.value = yearMatch[1];
-      const num = pickNumber(botTxt) || pickNumber(all); if (num && !field_number.value) field_number.value = num;
-      const name = pickLikelyName(topTxt) || pickLikelyName(all); if (name && !field_player.value) field_player.value = name;
-      const set = pickSetLine(midTxt) || pickSetLine(all); if (set && !field_set.value) field_set.value = set;
-      const t = all.toLowerCase(); if (!field_game.value) {
-        if (/(pok[eé]mon|tcg|pikachu|charizard)/i.test(all)) field_game.value = 'Pokémon';
-        else if (/magic|mtg|wizards of the coast/.test(t)) field_game.value = 'Magic: The Gathering';
-        else if (/(topps|bowman|mlb|rookie)/i.test(all)) field_game.value = 'Baseball';
-        else if (/(panini|prizm|optic|nba|basketball)/i.test(all)) field_game.value = 'Basketball';
-        else if (/(nfl|select|football)/i.test(all)) field_game.value = 'Football';
+    function populateFieldsFromOCR(text) {
+      // Very light heuristics; user can edit fields after
+      const lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
+      // Guess year
+      const yearMatch = text.match(/\b(19\d{2}|20\d{2})\b/);
+      field_year.value = yearMatch ? yearMatch[1] : field_year.value;
+      // Guess card number forms like #123 or No. 45
+      const numMatch = text.match(/(?:#|No\.?|Nº)\s*(\d+[A-Z]?)/i);
+      field_number.value = numMatch ? numMatch[1] : field_number.value;
+      // Attempt to pull likely player/character from top lines
+      field_player.value = field_player.value || (lines[0] || '');
+      // Try to find set keywords
+      const setLine = lines.find(l => /(Topps|Bowman|Prizm|Optic|Select|Chrome|Upper Deck|Fleer|Donruss|Panini|Pokémon|Pokemon|Wizards|MTG|Magic)/i);
+      field_set.value = field_set.value || (setLine || '');
+      // Game/Sport guess
+      const t = text.toLowerCase();
+      if (!field_game.value) {
+        if (/(pok[eé]mon|wotc|charizard|pikachu|tcg)/i.test(text)) field_game.value = 'Pokémon';
+        else if (/magic|mtg|wizards of the coast/i.test(text)) field_game.value = 'Magic: The Gathering';
+        else if (/nba|basketball|panini prizm|donruss optic/i.test(text)) field_game.value = 'Basketball';
+        else if (/mlb|baseball|topps|bowman|chrome/i.test(text)) field_game.value = 'Baseball';
+        else if (/nfl|football|select|prizm/i.test(text)) field_game.value = 'Football';
       }
     }
 
     // Condition widgets
-    cond_slider.addEventListener('input', () => { const v = Number(cond_slider.value); cond_label.textContent = `${v} (${condLabel(v).split(' ')[0]})`; updateYourCardDesc(); recomputeStats(); });
+    cond_slider.addEventListener('input', () => {
+      const v = Number(cond_slider.value);
+      cond_label.textContent = `${v} (${condLabel(v).split(' ')[0]})`;
+      updateYourCardDesc();
+      recomputeStats();
+    });
     grade_company.addEventListener('change', () => { updateYourCardDesc(); recomputeStats(); });
     grade_value.addEventListener('input', () => { updateYourCardDesc(); recomputeStats(); });
     comp_grade.addEventListener('change', () => { recomputeStats(); });
 
     // Save / Load
-    btnSave.addEventListener('click', () => { const payload = captureCard(); localStorage.setItem('tcv:lastCard', JSON.stringify(payload)); alert('Saved to your browser.'); });
-    btnLoad.addEventListener('click', () => { const raw = localStorage.getItem('tcv:lastCard'); if (!raw) return alert('Nothing saved yet.'); const data = JSON.parse(raw); restoreCard(data); alert('Loaded last card.'); });
+    btnSave.addEventListener('click', () => {
+      const payload = captureCard();
+      localStorage.setItem('tcv:lastCard', JSON.stringify(payload));
+      alert('Saved to your browser.');
+    });
+    btnLoad.addEventListener('click', () => {
+      const raw = localStorage.getItem('tcv:lastCard');
+      if (!raw) return alert('Nothing saved yet.');
+      const data = JSON.parse(raw);
+      restoreCard(data);
+      alert('Loaded last card.');
+    });
 
-    function captureCard() { return { fields: { game: field_game.value, year: field_year.value, player: field_player.value, set: field_set.value, number: field_number.value, variant: field_variant.value, cond: Number(cond_slider.value), grade_company: grade_company.value, grade_value: grade_value.value, comp_grade: comp_grade.value, }, comps: state.comps, ocrText: state.ocrText, }; }
-    function restoreCard(data) { const f = data.fields || {}; const c = data.comps || []; field_game.value = f.game || ''; field_year.value = f.year || ''; field_player.value = f.player || ''; field_set.value = f.set || ''; field_number.value = f.number || ''; field_variant.value = f.variant || ''; cond_slider.value = f.cond || 7; cond_label.textContent = `${cond_slider.value} (${condLabel(Number(cond_slider.value)).split(' ')[0]})`; grade_company.value = f.grade_company || ''; grade_value.value = f.grade_value || ''; comp_grade.value = f.comp_grade || 'raw-nm'; state.comps = c; renderComps(); recomputeStats(); updateYourCardDesc(); }
+    function captureCard() {
+      return {
+        fields: {
+          game: field_game.value,
+          year: field_year.value,
+          player: field_player.value,
+          set: field_set.value,
+          number: field_number.value,
+          variant: field_variant.value,
+          cond: Number(cond_slider.value),
+          grade_company: grade_company.value,
+          grade_value: grade_value.value,
+          comp_grade: comp_grade.value,
+        },
+        comps: state.comps,
+        ocrText: state.ocrText,
+      };
+    }
+    function restoreCard(data) {
+      const f = data.fields || {}; const c = data.comps || [];
+      field_game.value = f.game || '';
+      field_year.value = f.year || '';
+      field_player.value = f.player || '';
+      field_set.value = f.set || '';
+      field_number.value = f.number || '';
+      field_variant.value = f.variant || '';
+      cond_slider.value = f.cond || 7; cond_label.textContent = `${cond_slider.value} (${condLabel(Number(cond_slider.value)).split(' ')[0]})`;
+      grade_company.value = f.grade_company || '';
+      grade_value.value = f.grade_value || '';
+      comp_grade.value = f.comp_grade || 'raw-nm';
+      state.comps = c;
+      renderComps();
+      recomputeStats();
+      updateYourCardDesc();
+    }
 
     // Search links
     btnLinks.addEventListener('click', () => {
-      const q = buildQuery(); links.innerHTML = '';
+      const q = buildQuery();
+      links.innerHTML = '';
       addLink('eBay — Sold Listings', `https://www.ebay.com/sold?LH_Sold=1&LH_Complete=1&_nkw=${encodeURIComponent(q)}`);
       addLink('130point — eBay sold tool', `https://130point.com/marketplace/search_ebay.php?search=${encodeURIComponent(q)}`);
       addLink('TCGplayer — Marketplace', `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(q)}`);
       addLink('PSA — Pop Report (search)', `https://www.psacard.com/pop?query=${encodeURIComponent(q)}`);
       addLink('Google — Image match', `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`);
-      addLink('eBay — Completed (title-only)', `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&rt=nc&LH_Sold=1&LH_Complete=1&LH_TitleDesc=0`);
-      addLink('COMC — Catalog search', `https://www.comc.com/Cards,_${encodeURIComponent(q.replace(/\s+/g,'_'))}`);
     });
 
-    function buildQuery() { const parts = []; if (field_year.value) parts.push(field_year.value); if (field_player.value) parts.push(field_player.value); if (field_set.value) parts.push(field_set.value); if (field_number.value) parts.push('#' + field_number.value); if (field_variant.value) parts.push(field_variant.value); return parts.join(' ').replace(/\s+/g, ' ').trim(); }
-    function addLink(label, href) { const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.className = 'block underline'; a.textContent = label + ' ↗'; links.appendChild(a); }
+    function buildQuery() {
+      const parts = [];
+      if (field_year.value) parts.push(field_year.value);
+      if (field_player.value) parts.push(field_player.value);
+      if (field_set.value) parts.push(field_set.value);
+      if (field_number.value) parts.push('#' + field_number.value);
+      if (field_variant.value) parts.push(field_variant.value);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function addLink(label, href) {
+      const a = document.createElement('a');
+      a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.className = 'block underline';
+      a.textContent = label + ' ↗';
+      links.appendChild(a);
+    }
 
     // Comps table
     function renderComps() {
       compBody.innerHTML = '';
       state.comps.forEach(row => {
-        const tr = document.createElement('tr'); tr.className = 'border-b border-white/10';
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-white/10';
         tr.innerHTML = `
           <td class="py-2"><input data-k="price" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-28" value="${row.price || ''}" placeholder="$100"/></td>
           <td><input data-k="date" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-40" value="${row.date || ''}" placeholder="2025-10-16"/></td>
@@ -422,27 +545,91 @@
         compBody.appendChild(tr);
       });
     }
-    function addRow(row = {}) { state.comps.push({ id: uuidv4(), price: row.price || '', date: row.date || '', source: row.source || '', grade: row.grade || '', notes: row.notes || '' }); renderComps(); recomputeStats(); }
-    compBody.addEventListener('input', (e) => { const t = e.target; const id = t.getAttribute('data-id'); const k = t.getAttribute('data-k'); const row = state.comps.find(r => r.id === id); if (!row) return; row[k] = t.value; recomputeStats(); });
-    compBody.addEventListener('click', (e) => { const id = e.target.getAttribute && e.target.getAttribute('data-del'); if (!id) return; state.comps = state.comps.filter(r => r.id !== id); renderComps(); recomputeStats(); });
+
+    function addRow(row = {}) {
+      state.comps.push({ id: uuidv4(), price: row.price || '', date: row.date || '', source: row.source || '', grade: row.grade || '', notes: row.notes || '' });
+      renderComps();
+      recomputeStats();
+    }
+
+    compBody.addEventListener('input', (e) => {
+      const t = e.target; const id = t.getAttribute('data-id'); const k = t.getAttribute('data-k');
+      const row = state.comps.find(r => r.id === id); if (!row) return;
+      row[k] = t.value; recomputeStats();
+    });
+    compBody.addEventListener('click', (e) => {
+      const id = e.target.getAttribute && e.target.getAttribute('data-del');
+      if (!id) return;
+      state.comps = state.comps.filter(r => r.id !== id);
+      renderComps();
+      recomputeStats();
+    });
+
     btnAddRow.addEventListener('click', () => addRow());
 
     // CSV import/export
-    btnExportCSV.addEventListener('click', () => { const rows = [['price','date','source','grade','notes'], ...state.comps.map(r => [r.price,r.date,r.source,r.grade,r.notes])]; const csv = rows.map(r => r.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' }); saveAs(blob, 'card-comps.csv'); });
-    btnImportCSV.addEventListener('click', () => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,text/csv'; inp.onchange = () => { const file = inp.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const text = reader.result; parseCSV(String(text)); }; reader.readAsText(file); }; inp.click(); });
-    function parseCSV(text) { const lines = text.split(/\r?\n/).filter(Boolean); const header = lines.shift(); const cols = (header || '').split(',').map(s => s.replace(/^"|"$/g,'')); const idx = { price: cols.findIndex(c=>/price/i.test(c)), date: cols.findIndex(c=>/date/i.test(c)), source: cols.findIndex(c=>/source/i.test(c)), grade: cols.findIndex(c=>/(grade|cond)/i.test(c)), notes: cols.findIndex(c=>/note/i.test(c)), }; state.comps = lines.map(line => { const parts = line.match(/(?:\"([^\"]*)\"|([^,]+))(?=,|$)/g)?.map(s => s.replace(/^,?\"|\"$/g,'')) || []; return { id: uuidv4(), price: parts[idx.price]||'', date: parts[idx.date]||'', source: parts[idx.source]||'', grade: parts[idx.grade]||'', notes: parts[idx.notes]||'' }; }); renderComps(); recomputeStats(); }
+    btnExportCSV.addEventListener('click', () => {
+      const rows = [['price','date','source','grade','notes'], ...state.comps.map(r => [r.price,r.date,r.source,r.grade,r.notes])];
+      const csv = rows.map(r => r.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      saveAs(blob, 'card-comps.csv');
+    });
+
+    btnImportCSV.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = '.csv,text/csv';
+      inp.onchange = () => {
+        const file = inp.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = reader.result; parseCSV(String(text));
+        };
+        reader.readAsText(file);
+      };
+      inp.click();
+    });
+
+    function parseCSV(text) {
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const header = lines.shift();
+      const cols = (header || '').split(',').map(s => s.replace(/^"|"$/g,''));
+      const idx = {
+        price: cols.findIndex(c=>/price/i.test(c)),
+        date: cols.findIndex(c=>/date/i.test(c)),
+        source: cols.findIndex(c=>/source/i.test(c)),
+        grade: cols.findIndex(c=>/(grade|cond)/i.test(c)),
+        notes: cols.findIndex(c=>/note/i.test(c)),
+      };
+      state.comps = lines.map(line => {
+        const parts = line.match(/(?:\"([^\"]*)\"|([^,]+))(?=,|$)/g)?.map(s => s.replace(/^,?\"|\"$/g,'')) || [];
+        return { id: uuidv4(), price: parts[idx.price]||'', date: parts[idx.date]||'', source: parts[idx.source]||'', grade: parts[idx.grade]||'', notes: parts[idx.notes]||'' };
+      });
+      renderComps();
+      recomputeStats();
+    }
 
     // Copy Summary
-    btnCopySummary.addEventListener('click', async () => { const q = buildQuery(); const med = stat_median.textContent; const mult = multiplierEl.textContent; const est = est_value.textContent; const summary = `Card: ${q}\nComps (filtered) median: $${med}\nCondition multiplier: ${mult}x\nEstimated value: $${est}`; await navigator.clipboard.writeText(summary); alert('Summary copied to clipboard.'); });
+    btnCopySummary.addEventListener('click', async () => {
+      const q = buildQuery();
+      const med = stat_median.textContent;
+      const mult = multiplierEl.textContent;
+      const est = est_value.textContent;
+      const summary = `Card: ${q}\nComps (filtered) median: $${med}\nCondition multiplier: ${mult}x\nEstimated value: $${est}`;
+      await navigator.clipboard.writeText(summary);
+      alert('Summary copied to clipboard.');
+    });
 
-    // Init
-    addRow(); recomputeStats(); updateYourCardDesc();
+    // Initial row
+    addRow();
+    recomputeStats();
+    updateYourCardDesc();
 
     // --- OPTIONAL: API stubs (DIY) ---
-    // Provide fetchComps(query) that returns [{price, date, source, grade, notes}] and push to state.comps
-    // Example shape:
-    // async function fetchComps(q){ /* call your server → eBay Browse / TCGplayer */ return []; }
-    // (await fetchComps(buildQuery())).forEach(addRow);
+    // You can wire up live comps by hitting a server you control that talks to:
+    // - eBay Browse API (OAuth app)
+    // - TCGplayer Pricing API
+    // - 130point (no official API; use your own scraper responsibly)
+    // Provide a function like fetchComps(query) that returns [{price, date, source, grade, notes}] and push them to state.comps
 
   </script>
 </body>
