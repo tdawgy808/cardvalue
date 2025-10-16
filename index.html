@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trading Card Valuation — OCR + Comps</title>
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tesseract.js for on-device OCR (no server needed) -->
+  <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+  <!-- FileSaver for CSV export -->
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <!-- Simple UUID for row IDs -->
+  <script>
+    window.uuidv4 = function () {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = (Math.random() * 16) | 0,
+          v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+  </script>
+  <style>
+    html { background: #0b1020; }
+    .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(10px); }
+    .card { background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.08); }
+    .pill { border: 1px dashed rgba(255,255,255,0.25); }
+    .mono { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto p-6 space-y-6">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-semibold">Trading Card Valuation</h1>
+        <p class="text-slate-300">Upload → OCR → confirm details → pull comps → estimate</p>
+      </div>
+      <div class="text-sm text-slate-300">v1.0 • All on-device (no uploads)</div>
+    </header>
+
+    <!-- Uploader + Preview + OCR -->
+    <section class="grid md:grid-cols-2 gap-6">
+      <div class="card rounded-2xl p-4">
+        <label class="block font-medium mb-2">Upload a card photo</label>
+        <div id="dropzone" class="pill rounded-xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
+          <input id="fileInput" type="file" accept="image/*" class="hidden" />
+          <p class="mb-2">Drag & drop or <span class="underline">choose a file</span></p>
+          <p class="text-xs text-slate-300">Best results: straight-on, good lighting. Crop to front face if possible.</p>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <button id="btnOCR" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40">Run OCR</button>
+          <button id="btnClear" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">Clear</button>
+        </div>
+        <div id="ocrStatus" class="text-xs text-slate-300 mt-3"></div>
+        <div class="mt-4">
+          <canvas id="previewCanvas" class="w-full rounded-xl"></canvas>
+        </div>
+      </div>
+
+      <div class="card rounded-2xl p-4">
+        <h2 class="font-medium mb-4">Detected / Card Details (edit as needed)</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm text-slate-300">Game / Sport</label>
+            <input id="field_game" class="w-full mt-1 bg-white/10 rounded-xl p-2" placeholder="Baseball, Pokémon, MTG, NBA…" />
+          </div>
+          <div>
+            <label class="text-sm text-slate-300">Year</label>
+            <input id="field_year" class="w-full mt-1 bg-white/10 rounded-xl p-2" placeholder="1999" />
+          </div>
+          <div class="col-span-2">
+            <label class="text-sm text-slate-300">Player / Character</label>
+            <input id="field_player" class="w-full mt-1 bg-white/10 rounded-xl p-2" placeholder="Ken Griffey Jr., Charizard" />
+          </div>
+          <div class="col-span-2">
+            <label class="text-sm text-slate-300">Set / Expansion</label>
+            <input id="field_set" class="w-full mt-1 bg-white/10 rounded-xl p-2" placeholder="Topps Chrome, Base Set (Shadowless)" />
+          </div>
+          <div>
+            <label class="text-sm text-slate-300">Card # / Print</label>
+            <input id="field_number" class="w-full mt-1 bg-white/10 rounded-xl p-2" placeholder="#99 / RC / Holo" />
+          </div>
+          <div>
+            <label class="text-sm text-slate-300">Parallel / Variant</label>
+            <input id="field_variant" class="w-full mt-1 bg-white/10 rounded-xl p-2" placeholder="Refractor, Prizm Silver, 1st Edition" />
+          </div>
+        </div>
+
+        <div class="mt-4 grid md:grid-cols-2 gap-4">
+          <div class="card rounded-xl p-3">
+            <label class="text-sm text-slate-300">Condition (raw)</label>
+            <input id="cond_slider" type="range" min="1" max="10" step="1" value="7" class="w-full" />
+            <div class="flex justify-between text-xs text-slate-300">
+              <span>1 Poor</span><span id="cond_label" class="font-medium">7 (NM)</span><span>10 Gem</span>
+            </div>
+          </div>
+          <div class="card rounded-xl p-3">
+            <label class="text-sm text-slate-300">Graded?</label>
+            <div class="flex gap-2 mt-2">
+              <select id="grade_company" class="bg-white/10 rounded-xl p-2 flex-1">
+                <option value="">None (raw)</option>
+                <option>PSA</option>
+                <option>BGS</option>
+                <option>SGC</option>
+                <option>CGC</option>
+              </select>
+              <input id="grade_value" class="bg-white/10 rounded-xl p-2 w-24" placeholder="10" />
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 grid md:grid-cols-3 gap-3">
+          <button id="btnLinks" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500">Generate search links</button>
+          <button id="btnSave" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">Save card to browser</button>
+          <button id="btnLoad" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">Load last card</button>
+        </div>
+
+        <div id="links" class="mt-4 text-sm space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- Comps Table -->
+    <section class="card rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-medium">Sold Comparables</h2>
+        <div class="flex gap-2">
+          <button id="btnAddRow" class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500">Add Row</button>
+          <button id="btnImportCSV" class="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">Import CSV</button>
+          <button id="btnExportCSV" class="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">Export CSV</button>
+        </div>
+      </div>
+
+      <p class="text-slate-300 text-sm mt-1">Paste sale rows here (price, date, source, condition, notes). Use your own research from eBay “Sold”, 130point, TCGplayer, etc.</p>
+
+      <div class="overflow-x-auto mt-3">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-300">
+              <th class="py-2">Price</th>
+              <th>Date</th>
+              <th>Source</th>
+              <th>Grade / Cond</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="compBody"></tbody>
+        </table>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-4 mt-4">
+        <div class="card rounded-xl p-3">
+          <div class="text-xs text-slate-300 uppercase">Stats (outliers removed)</div>
+          <div class="mono mt-2 space-y-1" id="statsBox">
+            <div>Count: <span id="stat_count">0</span></div>
+            <div>Min: $<span id="stat_min">0</span></div>
+            <div>Q1 (25%): $<span id="stat_q1">0</span></div>
+            <div>Median: $<span id="stat_median">0</span></div>
+            <div>Q3 (75%): $<span id="stat_q3">0</span></div>
+            <div>Max: $<span id="stat_max">0</span></div>
+          </div>
+        </div>
+        <div class="card rounded-xl p-3">
+          <div class="text-xs text-slate-300 uppercase">Condition Adjustment</div>
+          <p class="text-sm text-slate-300">Multiplier based on raw condition or grade vs comps.</p>
+          <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+            <div>Assumed Comp Grade</div>
+            <select id="comp_grade" class="bg-white/10 rounded-xl p-2">
+              <option value="raw-nm">Raw ~ NM (7)</option>
+              <option value="raw-ex">Raw ~ EX (5)</option>
+              <option value="psa10">PSA 10</option>
+              <option value="psa9">PSA 9</option>
+              <option value="psa8">PSA 8</option>
+            </select>
+            <div>Your Card</div>
+            <div id="your_card_desc" class="font-medium">Raw ~ NM (7)</div>
+          </div>
+          <div class="mt-2 text-sm">Multiplier: <span id="multiplier" class="font-semibold">1.00</span>x</div>
+        </div>
+        <div class="card rounded-xl p-3">
+          <div class="text-xs text-slate-300 uppercase">Estimated Value</div>
+          <div class="text-3xl font-semibold mono mt-1">$<span id="est_value">0</span></div>
+          <div class="text-xs text-slate-300 mt-1">= Median × Multiplier</div>
+          <button id="btnCopySummary" class="mt-3 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500">Copy Summary</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Help / Notes -->
+    <section class="text-sm text-slate-300">
+      <details class="card rounded-2xl p-4">
+        <summary class="cursor-pointer font-medium">How this works (and optional API hooks)</summary>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+          <li><b>OCR:</b> Tesseract.js runs in your browser to guess player/set/year/card#. Click “Run OCR”, then review and edit fields.</li>
+          <li><b>Comps:</b> Click “Generate search links” to open eBay Sold, 130point, PSA Pop, and TCGplayer searches. Copy sale data here.</li>
+          <li><b>Stats:</b> We remove outliers using IQR, then compute Median. Condition multiplier scales for your card vs typical comp grade.</li>
+          <li><b>Privacy:</b> Images and data stay local; nothing is uploaded.</li>
+          <li><b>APIs (optional):</b> This file includes stubs to wire up eBay Browse, TCGplayer, or custom endpoints if you have keys—look for TODOs in code.</li>
+        </ul>
+      </details>
+    </section>
+
+    <footer class="text-xs text-slate-400 text-center py-8">© 2025 — Local-only prototype. Not investment advice.</footer>
+  </div>
+
+  <script>
+    // --- State ---
+    const state = {
+      image: null,
+      ocrText: '',
+      comps: [],
+    };
+
+    // --- Elements ---
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const canvas = document.getElementById('previewCanvas');
+    const ctx = canvas.getContext('2d');
+    const ocrStatus = document.getElementById('ocrStatus');
+
+    const field_game = document.getElementById('field_game');
+    const field_year = document.getElementById('field_year');
+    const field_player = document.getElementById('field_player');
+    const field_set = document.getElementById('field_set');
+    const field_number = document.getElementById('field_number');
+    const field_variant = document.getElementById('field_variant');
+
+    const cond_slider = document.getElementById('cond_slider');
+    const cond_label = document.getElementById('cond_label');
+    const grade_company = document.getElementById('grade_company');
+    const grade_value = document.getElementById('grade_value');
+    const your_card_desc = document.getElementById('your_card_desc');
+
+    const btnOCR = document.getElementById('btnOCR');
+    const btnClear = document.getElementById('btnClear');
+    const btnLinks = document.getElementById('btnLinks');
+    const btnSave = document.getElementById('btnSave');
+    const btnLoad = document.getElementById('btnLoad');
+    const links = document.getElementById('links');
+
+    const compBody = document.getElementById('compBody');
+    const btnAddRow = document.getElementById('btnAddRow');
+    const btnImportCSV = document.getElementById('btnImportCSV');
+    const btnExportCSV = document.getElementById('btnExportCSV');
+
+    const stat_count = document.getElementById('stat_count');
+    const stat_min = document.getElementById('stat_min');
+    const stat_q1 = document.getElementById('stat_q1');
+    const stat_median = document.getElementById('stat_median');
+    const stat_q3 = document.getElementById('stat_q3');
+    const stat_max = document.getElementById('stat_max');
+
+    const multiplierEl = document.getElementById('multiplier');
+    const est_value = document.getElementById('est_value');
+    const comp_grade = document.getElementById('comp_grade');
+    const btnCopySummary = document.getElementById('btnCopySummary');
+
+    // --- Helpers ---
+    function formatUSD(n) {
+      const val = isFinite(n) ? Number(n) : 0;
+      return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+    function parseUSD(s) {
+      if (typeof s === 'number') return s;
+      if (!s) return 0;
+      return parseFloat(String(s).replace(/[^0-9.\-]/g, '')) || 0;
+    }
+
+    // Outlier removal via IQR
+    function iqrFilter(arr) {
+      if (arr.length < 4) return arr; // need some data
+      const sorted = [...arr].sort((a,b)=>a-b);
+      const q1 = quantile(sorted, 0.25);
+      const q3 = quantile(sorted, 0.75);
+      const iqr = q3 - q1;
+      const low = q1 - 1.5 * iqr;
+      const high = q3 + 1.5 * iqr;
+      return sorted.filter(v => v >= low && v <= high);
+    }
+    function quantile(sorted, q) {
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      if (sorted[base + 1] !== undefined) {
+        return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+      } else {
+        return sorted[base];
+      }
+    }
+
+    function recomputeStats() {
+      const prices = state.comps.map(r => parseUSD(r.price)).filter(v=>v>0);
+      const filtered = iqrFilter(prices);
+      const count = filtered.length;
+      const min = count ? Math.min(...filtered) : 0;
+      const max = count ? Math.max(...filtered) : 0;
+      const q1 = count ? quantile([...filtered].sort((a,b)=>a-b), 0.25) : 0;
+      const med = count ? quantile([...filtered].sort((a,b)=>a-b), 0.5) : 0;
+      const q3 = count ? quantile([...filtered].sort((a,b)=>a-b), 0.75) : 0;
+
+      stat_count.textContent = count;
+      stat_min.textContent = formatUSD(min);
+      stat_q1.textContent = formatUSD(q1);
+      stat_median.textContent = formatUSD(med);
+      stat_q3.textContent = formatUSD(q3);
+      stat_max.textContent = formatUSD(max);
+
+      // Condition multiplier
+      const mult = computeMultiplier();
+      multiplierEl.textContent = mult.toFixed(2);
+      est_value.textContent = formatUSD(med * mult);
+    }
+
+    function computeMultiplier() {
+      const rawCond = Number(cond_slider.value); // 1-10
+      const graded = grade_company.value && Number(grade_value.value);
+      const compBasis = comp_grade.value; // assumed comps
+
+      // Baseline mapping -> relative strength vs Raw NM 7 ~= 1.00
+      const mapRaw = { 1:0.40, 2:0.48, 3:0.58, 4:0.70, 5:0.82, 6:0.92, 7:1.00, 8:1.08, 9:1.20, 10:1.35 };
+      const mapPSA = { 8:1.10, 9:1.45, 10:2.25 };
+
+      let your = mapRaw[rawCond] || 1.0;
+      if (graded) {
+        const g = Math.max(1, Math.min(10, Number(grade_value.value)));
+        if (g >= 10) your = 2.25; else if (g >= 9) your = 1.45; else if (g >= 8) your = 1.10; else your = 1.0;
+      }
+
+      let basis = 1.0;
+      if (compBasis === 'raw-ex') basis = mapRaw[5];
+      if (compBasis === 'raw-nm') basis = mapRaw[7];
+      if (compBasis === 'psa8') basis = mapPSA[8];
+      if (compBasis === 'psa9') basis = mapPSA[9];
+      if (compBasis === 'psa10') basis = mapPSA[10];
+
+      return your / basis;
+    }
+
+    function updateYourCardDesc() {
+      if (grade_company.value && grade_value.value) {
+        your_card_desc.textContent = `${grade_company.value} ${grade_value.value}`;
+      } else {
+        const lab = condLabel(Number(cond_slider.value));
+        your_card_desc.textContent = `Raw ~ ${lab}`;
+      }
+    }
+
+    function condLabel(v) {
+      if (v >= 9) return 'Mint (9-10)';
+      if (v >= 7) return 'NM (7-8)';
+      if (v >= 5) return 'EX (5-6)';
+      if (v >= 3) return 'VG (3-4)';
+      return 'Poor/Fair (1-2)';
+    }
+
+    // --- UI wiring ---
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('bg-white/5'); });
+    dropzone.addEventListener('dragleave', e => { dropzone.classList.remove('bg-white/5'); });
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('bg-white/5');
+      const file = e.dataTransfer.files?.[0];
+      if (file) loadImage(file);
+    });
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) loadImage(file);
+    });
+
+    function loadImage(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          state.image = img;
+          // Fit to canvas
+          const maxW = 1200, maxH = 800;
+          let w = img.width, h = img.height;
+          const scale = Math.min(maxW / w, maxH / h, 1);
+          canvas.width = Math.round(w * scale);
+          canvas.height = Math.round(h * scale);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+      links.innerHTML = '';
+      ocrStatus.textContent = '';
+    }
+
+    btnClear.addEventListener('click', () => {
+      canvas.width = 0; canvas.height = 0; state.image = null; state.ocrText = '';
+      [field_game, field_year, field_player, field_set, field_number, field_variant].forEach(el => el.value = '');
+      links.innerHTML = '';
+      ocrStatus.textContent = '';
+    });
+
+    btnOCR.addEventListener('click', async () => {
+      if (!state.image) { ocrStatus.textContent = 'Please upload an image first.'; return; }
+      ocrStatus.textContent = 'Running OCR…';
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        const { data } = await Tesseract.recognize(dataUrl, 'eng', { logger: m => { ocrStatus.textContent = m.status + ' ' + Math.round((m.progress||0)*100) + '%'; } });
+        state.ocrText = data.text || '';
+        ocrStatus.textContent = 'OCR complete.';
+        populateFieldsFromOCR(state.ocrText);
+      } catch (e) {
+        console.error(e);
+        ocrStatus.textContent = 'OCR failed. Try a clearer, closer photo.';
+      }
+    });
+
+    function populateFieldsFromOCR(text) {
+      // Very light heuristics; user can edit fields after
+      const lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
+      // Guess year
+      const yearMatch = text.match(/\b(19\d{2}|20\d{2})\b/);
+      field_year.value = yearMatch ? yearMatch[1] : field_year.value;
+      // Guess card number forms like #123 or No. 45
+      const numMatch = text.match(/(?:#|No\.?|Nº)\s*(\d+[A-Z]?)/i);
+      field_number.value = numMatch ? numMatch[1] : field_number.value;
+      // Attempt to pull likely player/character from top lines
+      field_player.value = field_player.value || (lines[0] || '');
+      // Try to find set keywords
+      const setLine = lines.find(l => /(Topps|Bowman|Prizm|Optic|Select|Chrome|Upper Deck|Fleer|Donruss|Panini|Pokémon|Pokemon|Wizards|MTG|Magic)/i);
+      field_set.value = field_set.value || (setLine || '');
+      // Game/Sport guess
+      const t = text.toLowerCase();
+      if (!field_game.value) {
+        if (/(pok[eé]mon|wotc|charizard|pikachu|tcg)/i.test(text)) field_game.value = 'Pokémon';
+        else if (/magic|mtg|wizards of the coast/i.test(text)) field_game.value = 'Magic: The Gathering';
+        else if (/nba|basketball|panini prizm|donruss optic/i.test(text)) field_game.value = 'Basketball';
+        else if (/mlb|baseball|topps|bowman|chrome/i.test(text)) field_game.value = 'Baseball';
+        else if (/nfl|football|select|prizm/i.test(text)) field_game.value = 'Football';
+      }
+    }
+
+    // Condition widgets
+    cond_slider.addEventListener('input', () => {
+      const v = Number(cond_slider.value);
+      cond_label.textContent = `${v} (${condLabel(v).split(' ')[0]})`;
+      updateYourCardDesc();
+      recomputeStats();
+    });
+    grade_company.addEventListener('change', () => { updateYourCardDesc(); recomputeStats(); });
+    grade_value.addEventListener('input', () => { updateYourCardDesc(); recomputeStats(); });
+    comp_grade.addEventListener('change', () => { recomputeStats(); });
+
+    // Save / Load
+    btnSave.addEventListener('click', () => {
+      const payload = captureCard();
+      localStorage.setItem('tcv:lastCard', JSON.stringify(payload));
+      alert('Saved to your browser.');
+    });
+    btnLoad.addEventListener('click', () => {
+      const raw = localStorage.getItem('tcv:lastCard');
+      if (!raw) return alert('Nothing saved yet.');
+      const data = JSON.parse(raw);
+      restoreCard(data);
+      alert('Loaded last card.');
+    });
+
+    function captureCard() {
+      return {
+        fields: {
+          game: field_game.value,
+          year: field_year.value,
+          player: field_player.value,
+          set: field_set.value,
+          number: field_number.value,
+          variant: field_variant.value,
+          cond: Number(cond_slider.value),
+          grade_company: grade_company.value,
+          grade_value: grade_value.value,
+          comp_grade: comp_grade.value,
+        },
+        comps: state.comps,
+        ocrText: state.ocrText,
+      };
+    }
+    function restoreCard(data) {
+      const f = data.fields || {}; const c = data.comps || [];
+      field_game.value = f.game || '';
+      field_year.value = f.year || '';
+      field_player.value = f.player || '';
+      field_set.value = f.set || '';
+      field_number.value = f.number || '';
+      field_variant.value = f.variant || '';
+      cond_slider.value = f.cond || 7; cond_label.textContent = `${cond_slider.value} (${condLabel(Number(cond_slider.value)).split(' ')[0]})`;
+      grade_company.value = f.grade_company || '';
+      grade_value.value = f.grade_value || '';
+      comp_grade.value = f.comp_grade || 'raw-nm';
+      state.comps = c;
+      renderComps();
+      recomputeStats();
+      updateYourCardDesc();
+    }
+
+    // Search links
+    btnLinks.addEventListener('click', () => {
+      const q = buildQuery();
+      links.innerHTML = '';
+      addLink('eBay — Sold Listings', `https://www.ebay.com/sold?LH_Sold=1&LH_Complete=1&_nkw=${encodeURIComponent(q)}`);
+      addLink('130point — eBay sold tool', `https://130point.com/marketplace/search_ebay.php?search=${encodeURIComponent(q)}`);
+      addLink('TCGplayer — Marketplace', `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(q)}`);
+      addLink('PSA — Pop Report (search)', `https://www.psacard.com/pop?query=${encodeURIComponent(q)}`);
+      addLink('Google — Image match', `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`);
+    });
+
+    function buildQuery() {
+      const parts = [];
+      if (field_year.value) parts.push(field_year.value);
+      if (field_player.value) parts.push(field_player.value);
+      if (field_set.value) parts.push(field_set.value);
+      if (field_number.value) parts.push('#' + field_number.value);
+      if (field_variant.value) parts.push(field_variant.value);
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function addLink(label, href) {
+      const a = document.createElement('a');
+      a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.className = 'block underline';
+      a.textContent = label + ' ↗';
+      links.appendChild(a);
+    }
+
+    // Comps table
+    function renderComps() {
+      compBody.innerHTML = '';
+      state.comps.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-white/10';
+        tr.innerHTML = `
+          <td class="py-2"><input data-k="price" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-28" value="${row.price || ''}" placeholder="$100"/></td>
+          <td><input data-k="date" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-40" value="${row.date || ''}" placeholder="2025-10-16"/></td>
+          <td><input data-k="source" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-40" value="${row.source || ''}" placeholder="eBay/TCGplayer"/></td>
+          <td><input data-k="grade" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-32" value="${row.grade || ''}" placeholder="raw/PSA 10"/></td>
+          <td><input data-k="notes" data-id="${row.id}" class="bg-white/10 rounded-lg p-2 w-64" value="${row.notes || ''}" placeholder="Alt art / holo / parallel"/></td>
+          <td><button data-del="${row.id}" class="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500">Delete</button></td>
+        `;
+        compBody.appendChild(tr);
+      });
+    }
+
+    function addRow(row = {}) {
+      state.comps.push({ id: uuidv4(), price: row.price || '', date: row.date || '', source: row.source || '', grade: row.grade || '', notes: row.notes || '' });
+      renderComps();
+      recomputeStats();
+    }
+
+    compBody.addEventListener('input', (e) => {
+      const t = e.target; const id = t.getAttribute('data-id'); const k = t.getAttribute('data-k');
+      const row = state.comps.find(r => r.id === id); if (!row) return;
+      row[k] = t.value; recomputeStats();
+    });
+    compBody.addEventListener('click', (e) => {
+      const id = e.target.getAttribute && e.target.getAttribute('data-del');
+      if (!id) return;
+      state.comps = state.comps.filter(r => r.id !== id);
+      renderComps();
+      recomputeStats();
+    });
+
+    btnAddRow.addEventListener('click', () => addRow());
+
+    // CSV import/export
+    btnExportCSV.addEventListener('click', () => {
+      const rows = [['price','date','source','grade','notes'], ...state.comps.map(r => [r.price,r.date,r.source,r.grade,r.notes])];
+      const csv = rows.map(r => r.map(v => '"' + String(v||'').replace(/"/g,'""') + '"').join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      saveAs(blob, 'card-comps.csv');
+    });
+
+    btnImportCSV.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = '.csv,text/csv';
+      inp.onchange = () => {
+        const file = inp.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = reader.result; parseCSV(String(text));
+        };
+        reader.readAsText(file);
+      };
+      inp.click();
+    });
+
+    function parseCSV(text) {
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const header = lines.shift();
+      const cols = (header || '').split(',').map(s => s.replace(/^"|"$/g,''));
+      const idx = {
+        price: cols.findIndex(c=>/price/i.test(c)),
+        date: cols.findIndex(c=>/date/i.test(c)),
+        source: cols.findIndex(c=>/source/i.test(c)),
+        grade: cols.findIndex(c=>/(grade|cond)/i.test(c)),
+        notes: cols.findIndex(c=>/note/i.test(c)),
+      };
+      state.comps = lines.map(line => {
+        const parts = line.match(/(?:\"([^\"]*)\"|([^,]+))(?=,|$)/g)?.map(s => s.replace(/^,?\"|\"$/g,'')) || [];
+        return { id: uuidv4(), price: parts[idx.price]||'', date: parts[idx.date]||'', source: parts[idx.source]||'', grade: parts[idx.grade]||'', notes: parts[idx.notes]||'' };
+      });
+      renderComps();
+      recomputeStats();
+    }
+
+    // Copy Summary
+    btnCopySummary.addEventListener('click', async () => {
+      const q = buildQuery();
+      const med = stat_median.textContent;
+      const mult = multiplierEl.textContent;
+      const est = est_value.textContent;
+      const summary = `Card: ${q}\nComps (filtered) median: $${med}\nCondition multiplier: ${mult}x\nEstimated value: $${est}`;
+      await navigator.clipboard.writeText(summary);
+      alert('Summary copied to clipboard.');
+    });
+
+    // Initial row
+    addRow();
+    recomputeStats();
+    updateYourCardDesc();
+
+    // --- OPTIONAL: API stubs (DIY) ---
+    // You can wire up live comps by hitting a server you control that talks to:
+    // - eBay Browse API (OAuth app)
+    // - TCGplayer Pricing API
+    // - 130point (no official API; use your own scraper responsibly)
+    // Provide a function like fetchComps(query) that returns [{price, date, source, grade, notes}] and push them to state.comps
+
+  </script>
+</body>
+</html>
